@@ -7,12 +7,13 @@
  * Version 3 not publicly released.
  * Version 4 rewrite:
  * Copyright (C) 2004-2012 Charles Cazabon <charlesc-memtester@pyropus.ca>
+ * Modified for TechUSB by Erik Sandberg <erik@repairtechsolutions.com>
  * Licensed under the terms of the GNU General Public License version 2 (only).
  * See the file COPYING for details.
  *
  */
 
-#define __version__ "4.3.0"
+#define __version__ "4.3.0-rt"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -42,9 +43,9 @@ struct test tests[] = {
     { "Compare OR", test_or_comparison },
     { "Compare AND", test_and_comparison },
     { "Sequential Increment", test_seqinc_comparison },
+    { "Checkerboard", test_checkerboard_comparison },
     { "Solid Bits", test_solidbits_comparison },
     { "Block Sequential", test_blockseq_comparison },
-    { "Checkerboard", test_checkerboard_comparison },
     { "Bit Spread", test_bitspread_comparison },
     { "Bit Flip", test_bitflip_comparison },
     { "Walking Ones", test_walkbits1_comparison },
@@ -102,7 +103,7 @@ off_t physaddrbase = 0;
 /* Function definitions */
 void usage(char *me) {
     fprintf(stderr, "\n"
-            "Usage: %s [-p physaddrbase [-d device]] <mem>[B|K|M|G] [loops]\n",
+            "Usage: %s [-p physaddrbase [-d device]] [-n numtests] <mem>[B|K|M|G] [loops]\n",
             me);
     exit(EXIT_FAIL_NONSTARTER);
 }
@@ -126,6 +127,8 @@ int main(int argc, char **argv) {
     int device_specified = 0;
     char *env_testmask = 0;
     ul testmask = 0;
+    
+    int numTests = sizeof(tests)/sizeof(struct test);
 
     printf("memtester version " __version__ " (%d-bit)\n", UL_LEN);
     printf("Copyright (C) 2001-2012 Charles Cazabon.\n");
@@ -150,7 +153,7 @@ int main(int argc, char **argv) {
         printf("using testmask 0x%lx\n", testmask);
     }
 
-    while ((opt = getopt(argc, argv, "p:d:")) != -1) {
+    while ((opt = getopt(argc, argv, "p:d:n:")) != -1) {
         switch (opt) {
             case 'p':
                 errno = 0;
@@ -192,7 +195,17 @@ int main(int argc, char **argv) {
                         device_specified = 1;
                     }
                 }
-                break;              
+                break;
+            case 'n':
+                errno = 0;
+                numTests = strtol(optarg, 0, 0);
+                if (errno) {
+                    fprintf(stderr, "error parsing numtests %s: %s\n", 
+                            optarg, strerror(errno));
+                    usage(argv[0]); /* doesn't return */
+                }
+                printf("running %d tests\n", numTests);
+                break;
             default: /* '?' */
                 usage(argv[0]); /* doesn't return */
         }
@@ -377,15 +390,15 @@ int main(int argc, char **argv) {
         } else {
             exit_code |= EXIT_FAIL_ADDRESSLINES;
         }
-        for (i=0;;i++) {
+        for (i=0;i<numTests;i++) {
             if (!tests[i].name) break;
-            /* If using a custom testmask, only run this test if the
-               bit corresponding to this test was set by the user.
-             */
-            if (testmask && (!((1 << i) & testmask))) {
-                continue;
-            }
-            printf("  %-20s: ", tests[i].name);
+                /* If using a custom testmask, only run this test if the
+                   bit corresponding to this test was set by the user.
+                 */
+                if (testmask && (!((1 << i) & testmask))) {
+                    continue;
+                }
+                printf("  %-20s: ", tests[i].name);
             if (!tests[i].fp(bufa, bufb, count)) {
                 printf("ok\n");
             } else {
